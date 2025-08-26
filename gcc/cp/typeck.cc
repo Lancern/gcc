@@ -3987,6 +3987,18 @@ cp_build_array_ref (location_t loc, tree array, tree idx,
       || TREE_TYPE (idx) == error_mark_node)
     return error_mark_node;
 
+  /* 0[array] */
+  if (TREE_CODE (TREE_TYPE (idx)) == ARRAY_TYPE)
+    {
+      std::swap (array, idx);
+      if (flag_strong_eval_order == 2 && TREE_SIDE_EFFECTS (array))
+	idx = first = save_expr (idx);
+      ret = cp_build_array_ref (loc, array, idx, complain);
+      if (first)
+	ret = build2 (COMPOUND_EXPR, TREE_TYPE (ret), first, ret);
+      return ret;
+    }
+
   /* If ARRAY is a COMPOUND_EXPR or COND_EXPR, move our reference
      inside it.  */
   switch (TREE_CODE (array))
@@ -4066,14 +4078,6 @@ cp_build_array_ref (location_t loc, tree array, tree idx,
 
   bool non_lvalue = convert_vector_to_array_for_subscript (loc, &array, idx);
 
-  /* 0[array] */
-  if (TREE_CODE (TREE_TYPE (idx)) == ARRAY_TYPE)
-    {
-      std::swap (array, idx);
-      if (flag_strong_eval_order == 2 && TREE_SIDE_EFFECTS (array))
-	idx = first = save_expr (idx);
-    }
-
   if (TREE_CODE (TREE_TYPE (array)) == ARRAY_TYPE)
     {
       tree rval, type;
@@ -4149,8 +4153,6 @@ cp_build_array_ref (location_t loc, tree array, tree idx,
       protected_set_expr_location (ret, loc);
       if (non_lvalue)
 	ret = non_lvalue_loc (loc, ret);
-      if (first)
-	ret = build2_loc (loc, COMPOUND_EXPR, TREE_TYPE (ret), first, ret);
       return ret;
     }
 
@@ -4158,8 +4160,8 @@ cp_build_array_ref (location_t loc, tree array, tree idx,
     tree ar = cp_default_conversion (array, complain);
     tree ind = cp_default_conversion (idx, complain);
 
-    if (!processing_template_decl
-	&& !first && flag_strong_eval_order == 2 && TREE_SIDE_EFFECTS (ind))
+    if (!processing_template_decl && flag_strong_eval_order == 2
+	&& TREE_SIDE_EFFECTS (ind))
       ar = first = save_expr (ar);
 
     /* Put the integer in IND to simplify error checking.  */
